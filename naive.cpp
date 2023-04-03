@@ -97,6 +97,13 @@ void runMainCycle() {
     sf::Image   drawImg;
     drawImg.create(WINDOW_LENGTH, WINDOW_HEIGHT, sf::Color::Transparent);
 
+    sf::Font font;
+    font.loadFromFile("assets/font.ttf");
+
+    sf::Text    text;
+    text.setFont(font);
+    text.setFillColor(sf::Color::White);
+
     FILE* picFile = fopen(frontPic, "rb");
     getBmpSize(&x, &y, &channel, picFile);
     char** picArr = picToArr(x, y, channel, picFile);
@@ -125,11 +132,17 @@ void runMainCycle() {
                 window.close();
             }
 
+            clock_t startTime = clock();
+            imposePics(&catImg, &backImg, &drawImg);
+            sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
+            text.setString(fpsText);
+
             drawTexture.loadFromImage(drawImg);
             drawSp.     setTexture   (drawTexture);
 
             window.clear();
             window.draw(drawSp);
+            window.draw(text);
             window.display();
         }
     }
