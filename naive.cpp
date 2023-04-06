@@ -8,41 +8,44 @@
 }                                                             \
 
 
-sf::Image imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
+Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     ON_ERROR(!fPtr, "Nullptr");
 
-    sf::Image pixelImg;
-    fprintf(stderr, "%d %d\n", x, y);
-    pixelImg.create(x, y, sf::Color::White);
+    Pixel_t** picArr = (Pixel_t**) calloc(y, sizeof(Pixel_t*));
+    if (!picArr) return NULL;
+
+    for (int i = 0; i < y; i++) {
+        picArr[i] = (Pixel_t*) calloc(x, sizeof(Pixel_t));
+        if (!(picArr[i])) return NULL;
+    }
 
     int curPos = offset;
-    channel >>= 3;
 
     for (int i = y - 1; i >= 0; i--) {
-        for (int j = 0; j < x; j++) {
+        for (int j = 0; j < x * channel; j += channel) {
             if (channel == 4) {
-                pixelImg.setPixel(j, i, sf::Color(
-                    fPtr[curPos],
-                    fPtr[curPos + 1],
-                    fPtr[curPos + 2],
-                    fPtr[curPos + 3]
-                ));
-
-                curPos += 4;
-            } else {
-                pixelImg.setPixel(j, i, sf::Color(
+                picArr[i][j / channel] = {
+                    fPtr[curPos++],
                     fPtr[curPos++],
                     fPtr[curPos++],
                     fPtr[curPos++]
-                ));  
+                };
+            } else {
+                picArr[i][j / channel] = {
+                    fPtr[curPos + 2],
+                    fPtr[curPos + 1],
+                    fPtr[curPos],
+                };
+
+                curPos += 3;
             }
         }
     }
 
-    return pixelImg;
+    return picArr;
 }
 
-sf::Image imageFromFile(const char *fileName) {
+Pixel_t **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     ON_ERROR(!fileName, "Nullptr");
 
     // index to an entry in the process's table of open file descriptors
@@ -57,33 +60,57 @@ sf::Image imageFromFile(const char *fileName) {
     int signature = fPtr[1] << 8 | fPtr[0];
     ON_ERROR(signature != CMP_SIGN, "That is not BMP file!!!");
 
-    int fOffset = 0, sizeX = 0, sizeY = 0, channel = 0;
+    int fOffset = 0;
 
     memcpy(&fOffset, fPtr + OFFSET_START, 4);
-    memcpy(&sizeX, fPtr + SIZEX_START, 4);
-    memcpy(&sizeY, fPtr + SIZEY_START, 4);
-    memcpy(&channel, fPtr + CHANNEL_ST, 2);
+    memcpy(x, fPtr + SIZEX_START, 4);
+    memcpy(y, fPtr + SIZEY_START, 4);
+    memcpy(channel, fPtr + CHANNEL_ST, 2);
+    (*channel) >>= 3;
 
-    sf::Image image = imageFromArr(sizeX, sizeY, channel, fOffset, fPtr);
+    Pixel_t **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
     close(fileDescr);
 
     return image;
 }
 
-void imposePics(sf::Image* top, sf::Image* back, int backStartX, int backStartY) {
-    int sizeY = top->getSize().y;
-    int sizeX = top->getSize().x;
+sf::Image imageFromPixels(int x, int y, int channel, Pixel_t **pixels) {
+    sf::Image pixelImg;
+    pixelImg.create(x, y, sf::Color::Transparent);
 
-    for (int i = 0; i < sizeY; i++) {
-        for (int j = 0; j < sizeX; j++) {
-            float alpha = top->getPixel(j, i).a / 255;
+    for (int i = y - 1; i >= 0; i--) {
+        for (int j = 0; j < x; j++) {
+            if (channel == 4) {
+                pixelImg.setPixel(j, i, sf::Color(
+                    (pixels[i][j]).r,
+                    (pixels[i][j]).g,
+                    (pixels[i][j]).b,
+                    (pixels[i][j]).a
+                ));
+            } else {
+                pixelImg.setPixel(j, i, sf::Color(
+                    (pixels[i][j]).r,
+                    (pixels[i][j]).g,
+                    (pixels[i][j]).b
+                ));  
+            }
+        }
+    }
+
+    return pixelImg;
+}
+
+void imposePics(Pixel_t **top, int x, int y, int frontChannel, Pixel_t **back, int backStartX, int backStartY, sf::Image *draw) {
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x; j++) {
+            float alpha = top[i][j].a / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
-            back->setPixel(backX, backY, sf::Color(
-                top->getPixel(j, i).r * alpha + (1 - alpha) * back->getPixel(backX, backY).r,
-                top->getPixel(j, i).g * alpha + (1 - alpha) * back->getPixel(backX, backY).g,
-                top->getPixel(j, i).b * alpha + (1 - alpha) * back->getPixel(backX, backY).b,
+            draw->setPixel(backX, backY, sf::Color(
+                top[i][j].r * alpha + (1 - alpha) * back[backY][backX].r,
+                top[i][j].g * alpha + (1 - alpha) * back[backY][backX].g,
+                top[i][j].b * alpha + (1 - alpha) * back[backY][backX].b,
                 255
             ));
         }
@@ -91,8 +118,6 @@ void imposePics(sf::Image* top, sf::Image* back, int backStartX, int backStartY)
 }
 
 void runMainCycle() {
-    int x = 0, y = 0, channel = 0;
-
     sf::Texture drawTexture;
     sf::Sprite  drawSp;
     sf::Image   drawImg;
@@ -105,8 +130,12 @@ void runMainCycle() {
     text.setFont(font);
     text.setFillColor(sf::Color::White);
 
-    sf::Image catImg  = imageFromFile("assets/front.bmp");
-    sf::Image backImg = imageFromFile("assets/back.bmp");
+    int frontX = 0, frontY = 0, frontChannel = 0;
+    Pixel_t **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
+
+    int backX = 0, backY = 0, backChannel = 0;
+    Pixel_t **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
     window.setPosition(sf::Vector2i(0, 0));
@@ -123,7 +152,7 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            imposePics(&catImg, &backImg, 100, 100);
+            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, &backImg);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
 
