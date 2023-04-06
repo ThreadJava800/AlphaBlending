@@ -1,3 +1,5 @@
+#include <immintrin.h>
+
 #include "alphablend.h"
 
 #define ON_ERROR(expr, errStr) {                         \
@@ -76,7 +78,7 @@ void imposePics(sf::Image* top, sf::Image* back, int backStartX, int backStartY)
 
     for (int i = 0; i < sizeY; i++) {
         for (int j = 0; j < sizeX; j++) {
-            float alpha = top->getPixel(j, i).a / 255;
+            int alpha = top->getPixel(j, i).a / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
