@@ -23,5 +23,5 @@ const char* frontPic = "assets/front.bmp";
 sf::Image imageFromArr(int x, int y, int channel, int offset, char* fPtr);
 sf::Image imageFromFile(const char *fileName);
 
-void imposePics(sf::Image* top, sf::Image* back, sf::Image* pixels);
+void imposePics(sf::Image* top, sf::Image* back, int backStartX, int backStartY);
 void runMainCycle();

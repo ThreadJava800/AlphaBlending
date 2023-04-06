@@ -12,12 +12,11 @@ sf::Image imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     ON_ERROR(!fPtr, "Nullptr");
 
     sf::Image pixelImg;
-    pixelImg.create(WINDOW_LENGTH, WINDOW_HEIGHT, sf::Color::Transparent);
+    fprintf(stderr, "%d %d\n", x, y);
+    pixelImg.create(x, y, sf::Color::White);
 
     int curPos = offset;
     channel >>= 3;
-
-    printf("%d\n", channel);
 
     for (int i = y - 1; i >= 0; i--) {
         for (int j = 0; j < x; j++) {
@@ -71,15 +70,20 @@ sf::Image imageFromFile(const char *fileName) {
     return image;
 }
 
-void imposePics(sf::Image* top, sf::Image* back, sf::Image* pixels) {
-    for (int i = 0; i < WINDOW_HEIGHT; i++) {
-        for (int j = 0; j < WINDOW_LENGTH; j++) {
-            int alpha = top->getPixel(j, i).a / 255;
+void imposePics(sf::Image* top, sf::Image* back, int backStartX, int backStartY) {
+    int sizeY = top->getSize().y;
+    int sizeX = top->getSize().x;
 
-            pixels->setPixel(j, i, sf::Color(
-                top->getPixel(j, i).r * alpha + (1 - alpha) * back->getPixel(j, i).r,
-                top->getPixel(j, i).g * alpha + (1 - alpha) * back->getPixel(j, i).g,
-                top->getPixel(j, i).b * alpha + (1 - alpha) * back->getPixel(j, i).b,
+    for (int i = 0; i < sizeY; i++) {
+        for (int j = 0; j < sizeX; j++) {
+            int alpha = top->getPixel(j, i).a / 255;
+            int backX = j + backStartX;
+            int backY = i + backStartY;
+
+            back->setPixel(backX, backY, sf::Color(
+                top->getPixel(j, i).r * alpha + (1 - alpha) * back->getPixel(backX, backY).r,
+                top->getPixel(j, i).g * alpha + (1 - alpha) * back->getPixel(backX, backY).g,
+                top->getPixel(j, i).b * alpha + (1 - alpha) * back->getPixel(backX, backY).b,
                 255
             ));
         }
@@ -101,10 +105,8 @@ void runMainCycle() {
     text.setFont(font);
     text.setFillColor(sf::Color::White);
 
-    sf::Image catImg  = imageFromFile("assets/back.bmp");
-    // sf::Image backImg = imageFromFile("assets/back.bmp");
-
-    // imposePics(&catImg, &backImg, &drawImg);
+    sf::Image catImg  = imageFromFile("assets/front.bmp");
+    sf::Image backImg = imageFromFile("assets/back.bmp");
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
     window.setPosition(sf::Vector2i(0, 0));
@@ -121,11 +123,11 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            // imposePics(&catImg, &backImg, &drawImg);
+            imposePics(&catImg, &backImg, 100, 100);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
 
-            drawTexture.loadFromImage(catImg);
+            drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);
 
             window.clear();
