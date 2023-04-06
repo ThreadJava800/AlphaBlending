@@ -1,77 +1,74 @@
 #include "alphablend.h"
 
-void getBmpSize(int* x, int* y, int* channel, FILE* file) {
-    if (!x || !y || !file) return;
+#define ON_ERROR(expr, errStr) {                         \
+    if (expr) {                                           \
+        fprintf(stderr, "FATAL ERROR: %s\n", errStr);      \
+        abort();                                            \
+    }                                                        \
+}                                                             \
 
-    unsigned char intBuf[4] = {};
 
-    fseek(file, 18, 0);     // set pointer to image width
+sf::Image imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
+    ON_ERROR(!fPtr, "Nullptr");
 
-    fread(intBuf, 4, 1, file);
-    *x = intBuf[0] | (intBuf[1] << 8) | (intBuf[2] << 16) | (intBuf[3] << 24);
+    sf::Image pixelImg;
+    pixelImg.create(WINDOW_LENGTH, WINDOW_HEIGHT, sf::Color::Transparent);
 
-    fread(intBuf, 4, 1, file);
-    *y = intBuf[0] | (intBuf[1] << 8) | (intBuf[2] << 16) | (intBuf[3] << 24);
+    int curPos = offset;
+    channel >>= 3;
 
-    fseek(file, 28, 0);     // set pointer to bits per pixel
-
-    fread(intBuf, 2, 1, file);
-    *channel = (intBuf[0] | (intBuf[1] << 8)) >> 3; // bytes per pixel
-}
-
-char** picToArr(int x, int y, int channel, FILE* file) {
-    if (x < 0 || y < 0 || !file) return NULL;
-
-    fseek(file, 54, 0);     // move to start of binary array (skip signature)
-
-    char** picArr = (char**) calloc(y, sizeof(char*));
-    if (!picArr) return NULL;
-
-    for (int i = 0; i < y; i++) {
-        picArr[i] = (char*) calloc(x * channel, sizeof(char));
-        if (!(picArr[i])) return NULL;
-    }
+    printf("%d\n", channel);
 
     for (int i = y - 1; i >= 0; i--) {
-        for (int j = 0; j < x * channel; j += channel) {
+        for (int j = 0; j < x; j++) {
             if (channel == 4) {
-                for (int m = 0; m < channel; m++) {
-                    picArr[i][j + m] = fgetc(file);
-                }
+                pixelImg.setPixel(j, i, sf::Color(
+                    fPtr[curPos],
+                    fPtr[curPos + 1],
+                    fPtr[curPos + 2],
+                    fPtr[curPos + 3]
+                ));
+
+                curPos += 4;
             } else {
-                for (int m = channel - 1; m >= 0; m--) {
-                    picArr[i][j + m] = fgetc(file);
-                }
+                pixelImg.setPixel(j, i, sf::Color(
+                    fPtr[curPos++],
+                    fPtr[curPos++],
+                    fPtr[curPos++]
+                ));  
             }
         }
     }
 
-    return picArr;
+    return pixelImg;
 }
 
-sf::Image getImageFromBmp(int x, int y, int channel, char** bmp) {
-    sf::Image pixelImg;
-    pixelImg.create(WINDOW_LENGTH, WINDOW_HEIGHT, sf::Color::Transparent);
+sf::Image imageFromFile(const char *fileName) {
+    ON_ERROR(!fileName, "Nullptr");
 
-    for (int i = 0; i < y; i++) {
-        for (int j = 0; j < x * channel; j += channel) {
-            if (channel == 3)
-                pixelImg.setPixel(j / channel, i, sf::Color(
-                    bmp[i][j],
-                    bmp[i][j + 1],
-                    bmp[i][j + 2]
-                ));
-            else 
-                pixelImg.setPixel(j / channel, i, sf::Color(
-                    bmp[i][j],
-                    bmp[i][j + 1],
-                    bmp[i][j + 2],
-                    bmp[i][j + 3]
-                ));
-        }
-    }
+    // index to an entry in the process's table of open file descriptors
+    int fileDescr = open(fileName, O_RDONLY);
+    struct stat fileStat;
+    int fErr = fstat(fileDescr, &fileStat);
+    ON_ERROR(fErr < 0, "Couldn't open file");
 
-    return pixelImg;
+    char *fPtr = (char*) mmap(NULL, fileStat.st_size, PROT_READ, MAP_SHARED, fileDescr, 0);
+    ON_ERROR(fPtr == MAP_FAILED, "Mapping not succeeded");
+
+    int signature = fPtr[1] << 8 | fPtr[0];
+    ON_ERROR(signature != CMP_SIGN, "That is not BMP file!!!");
+
+    int fOffset = 0, sizeX = 0, sizeY = 0, channel = 0;
+
+    memcpy(&fOffset, fPtr + OFFSET_START, 4);
+    memcpy(&sizeX, fPtr + SIZEX_START, 4);
+    memcpy(&sizeY, fPtr + SIZEY_START, 4);
+    memcpy(&channel, fPtr + CHANNEL_ST, 2);
+
+    sf::Image image = imageFromArr(sizeX, sizeY, channel, fOffset, fPtr);
+    close(fileDescr);
+
+    return image;
 }
 
 void imposePics(sf::Image* top, sf::Image* back, sf::Image* pixels) {
@@ -104,19 +101,10 @@ void runMainCycle() {
     text.setFont(font);
     text.setFillColor(sf::Color::White);
 
-    FILE* picFile = fopen(frontPic, "rb");
-    getBmpSize(&x, &y, &channel, picFile);
-    char** picArr = picToArr(x, y, channel, picFile);
-    sf::Image catImg = getImageFromBmp(x, y, channel, picArr);
-    fclose(picFile);
+    sf::Image catImg  = imageFromFile("assets/back.bmp");
+    // sf::Image backImg = imageFromFile("assets/back.bmp");
 
-    picFile = fopen(backPic, "rb");
-    getBmpSize(&x, &y, &channel, picFile);
-    picArr = picToArr(x, y, channel, picFile);
-    sf::Image backImg = getImageFromBmp(x, y, channel, picArr);
-    fclose(picFile);
-
-    imposePics(&catImg, &backImg, &drawImg);
+    // imposePics(&catImg, &backImg, &drawImg);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
     window.setPosition(sf::Vector2i(0, 0));
@@ -133,11 +121,11 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            imposePics(&catImg, &backImg, &drawImg);
+            // imposePics(&catImg, &backImg, &drawImg);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
 
-            drawTexture.loadFromImage(drawImg);
+            drawTexture.loadFromImage(catImg);
             drawSp.     setTexture   (drawTexture);
 
             window.clear();
