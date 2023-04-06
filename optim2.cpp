@@ -107,19 +107,15 @@ void imposePics(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int ba
     __m256 arr1   = _mm256_set1_ps(1);
 
     for (int i = 0; i < y; i++) {
-        for (int j = 0; j < x - 7; j += 8) {
-            int backX = j + backStartX;
-            int backY = i + backStartY;
-
-            __m256i frontPic = (__m256i*) &((int) top [i][j]);
-            __m256i backPic  = (__m256i*) &((int) back[backY][backX]);
+        for (int j = 0; j < x; j += 8) {
             
-            // for (int m = 0; m < 8; m++, backX++) {
-            //     draw->setPixel(backX, backY, sf::Color(
-            //         (unsigned char)r[m], (unsigned char)g[m], (unsigned char)b[m],
-            //         255
-            //     ));
-            // }
+            
+            for (int m = 0; m < 8; m++, backX++) {
+                draw->setPixel(backX, backY, sf::Color(
+                    (unsigned char)r[m], (unsigned char)g[m], (unsigned char)b[m],
+                    255
+                ));
+            }
         }
     }
 }
