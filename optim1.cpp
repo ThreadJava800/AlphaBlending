@@ -53,8 +53,7 @@ int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
                 curPos += 4;
             } else {
                 memcpy(&(picArr[i][j / channel]), fPtr + curPos, 3);
-                picArr[i][j / channel] <<= 8;
-                picArr[i][j / channel] |= 255;
+                picArr[i][j / channel] |= (255 << 24);
                 curPos += 3;
             }
         }
@@ -96,7 +95,10 @@ void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, 
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
             back->setPixel(startX + j, startY + i, sf::Color(
-                imposed[i * x + j]
+                ((imposed[i * x + j] & 0x00FF0000) >> 16),
+                ((imposed[i * x + j] & 0x0000FF00) >>  8),
+                ((imposed[i * x + j] & 0x000000FF)),
+                ((imposed[i * x + j] & 0xFF000000) >> 24)
             ));
         }
     }
@@ -109,7 +111,10 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     for (int i = y - 1; i >= 0; i--) {
         for (int j = 0; j < x; j++) {
             pixelImg.setPixel(j, i, sf::Color(
-                pixels[i][j]
+                ((pixels[i][j] & 0xFF0000) >> 16),
+                ((pixels[i][j] & 0xFF00) >>  8),
+                ((pixels[i][j] & 0xFF)),
+                ((pixels[i][j] & 0xFF000000) >> 24)
             ));
         }
     }
@@ -156,6 +161,20 @@ void imposePics(int **top, int x, int y, int channel, int **back, int backStartX
             _mm256_storeu_si256((__m256i *) (draw + i * x + j), res);
         }
     }
+
+    for (int i = 0; i < y; i++) {
+        for (int j = x - 7; j < x; j++) {
+            float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
+            int backX = j + backStartX;
+            int backY = i + backStartY;
+
+            draw[i * x + j] = (
+                255 << 24 |
+                ((uchar) (((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16)) << 16) |
+                ((uchar) (((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8)) << 8)   |
+                ((uchar) (((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF)))));
+        }
+    }
 }
 
 void runMainCycle() {
@@ -175,7 +194,7 @@ void runMainCycle() {
     int **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    int **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    int **backImgPixels  = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
