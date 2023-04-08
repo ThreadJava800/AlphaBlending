@@ -28,4 +28,5 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels);
 
 void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y);
 void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw);
+void freeDoubleArr(int **arr, int x, int y);
 void runMainCycle();

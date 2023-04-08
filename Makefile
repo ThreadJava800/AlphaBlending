@@ -24,7 +24,7 @@ erase:
 	clear
 
 compile:
-	@${CC} ${CFLAGS} -mavx2 $(SOURCES) -o $(EXECUTABLE) $(SFML_EXEC)
+	@${CC} ${CFLAGS} -o3 -mavx2 $(SOURCES) -o $(EXECUTABLE) $(SFML_EXEC)
 
 run:
 	@./${EXECUTABLE}

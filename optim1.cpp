@@ -92,6 +92,8 @@ int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
 }
 
 void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y) {
+    ON_ERROR(!back || !imposed, "Nullptr");
+
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
             back->setPixel(startX + j, startY + i, sf::Color(
@@ -105,10 +107,14 @@ void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, 
 }
 
 sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
+    ON_ERROR(!pixels, "Nullptr");
+
     sf::Image pixelImg;
     pixelImg.create(x, y, sf::Color::Transparent);
 
     for (int i = y - 1; i >= 0; i--) {
+        ON_ERROR(!pixels[i], "Nullptr");
+
         for (int j = 0; j < x; j++) {
             pixelImg.setPixel(j, i, sf::Color(
                 ((pixels[i][j] & 0xFF0000) >> 16),
@@ -177,6 +183,15 @@ void imposePics(int **top, int x, int y, int channel, int **back, int backStartX
     }
 }
 
+void freeDoubleArr(int **arr, int x, int y) {
+    if (!arr) return;
+
+    for (int i = 0; i < y; i++) {
+        if (arr[i]) free(arr[i]);
+    }
+    free(arr);
+}
+
 void runMainCycle() {
     sf::Texture drawTexture;
     sf::Sprite  drawSp;
@@ -201,6 +216,7 @@ void runMainCycle() {
     window.setPosition(sf::Vector2i(0, 0));
 
     int* picArr = (int*) calloc(frontY * frontX, sizeof(int));
+    if (!picArr) return;
 
     while (window.isOpen())
     {
@@ -229,6 +245,10 @@ void runMainCycle() {
             window.display();
         }
     }
+
+    freeDoubleArr(catImgPixels, frontX, frontY);
+    freeDoubleArr(backImgPixels, backX, backY);
+    free(picArr);
 }
 
 int main() {
