@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <string.h>
 
+typedef unsigned char uchar;
+
 const int WINDOW_LENGTH = 1920;
 const int WINDOW_HEIGHT = 1080;
 
@@ -24,5 +26,6 @@ int **imageFromArr(int x, int y, int channel, int offset, char* fPtr);
 int **imageFromFile(const char *fileName, int *x, int *y, int *channel);
 sf::Image imageFromPixels(int x, int y, int channel, int **pixels);
 
-void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, sf::Image *draw);
+void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y);
+void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw);
 void runMainCycle();

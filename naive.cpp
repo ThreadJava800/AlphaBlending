@@ -82,19 +82,28 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     return pixelImg;
 }
 
-void imposePics(int **top, int x, int y, int frontChannel, int **back, int backStartX, int backStartY, sf::Image *draw) {
+void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y) {
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x; j++) {
+            back->setPixel(startX + j, startY + i, sf::Color(
+                imposed[i * x + j]
+            ));
+        }
+    }
+}
+
+void imposePics(int **top, int x, int y, int frontChannel, int **back, int backStartX, int backStartY, int *draw) {
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
             float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
-            draw->setPixel(backX, backY, sf::Color(
-                ((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF000000) >> 24),
-                ((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16),
-                ((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8),
-                255
-            ));
+            draw[i * x + j] = (
+                ((uchar) (((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF000000) >> 24)) << 24) |
+                ((uchar) (((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16)) << 16)   |
+                ((uchar) (((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8)) << 8)       |
+                255);
         }
     }
 }
@@ -122,6 +131,8 @@ void runMainCycle() {
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
     window.setPosition(sf::Vector2i(0, 0));
 
+    int* picArr = (int*) calloc(frontY * frontX, sizeof(int));
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -134,9 +145,11 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, &backImg);
+            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
+
+            mergeImposed(&backImg, picArr, 100, 100, frontX, frontY);
 
             drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);
