@@ -2,6 +2,29 @@
 
 #include "alphablend.h"
 
+__m256i maskR_B = _mm256_set1_epi32(0x00FF00FF);
+__m256i maskA_G = _mm256_set1_epi32(0xFF00FF00);
+__m256i SHUFFLE_A_G    = _mm256_set_epi8(   0x80, 31, 0x80, 29,
+                                            0x80, 27, 0x80, 25,
+                                            0x80, 23, 0x80, 21,
+                                            0x80, 19, 0x80, 17,
+                                            0x80, 15, 0x80, 13,
+                                            0x80, 11, 0x80, 9,
+                                            0x80, 7,  0x80, 5,
+                                            0x80, 3,  0x80, 1);
+
+__m256i SHUFFLE_ONLY_A = _mm256_set_epi8(   0x80, 31, 0x80, 31,
+                                            0x80, 27, 0x80, 27,
+                                            0x80, 23, 0x80, 23,
+                                            0x80, 19, 0x80, 19,
+                                            0x80, 15, 0x80, 15,
+                                            0x80, 11, 0x80, 11,
+                                            0x80, 7,  0x80, 7,
+                                            0x80, 3,  0x80, 3);
+
+__m256i ALL_255        = _mm256_set1_epi8(255);
+__m256i ZERO_SECOND    = _mm256_set1_epi32(0xFF00FF00);
+
 #define ON_ERROR(expr, errStr) {                         \
     if (expr) {                                           \
         fprintf(stderr, "FATAL ERROR: %s\n", errStr);      \
@@ -10,14 +33,14 @@
 }                                                             \
 
 
-Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
+int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     ON_ERROR(!fPtr, "Nullptr");
 
-    Pixel_t** picArr = (Pixel_t**) calloc(y, sizeof(Pixel_t*));
+    int** picArr = (int**) calloc(y, sizeof(int*));
     if (!picArr) return NULL;
 
     for (int i = 0; i < y; i++) {
-        picArr[i] = (Pixel_t*) calloc(x, sizeof(Pixel_t));
+        picArr[i] = (int*) calloc(x, sizeof(int));
         if (!(picArr[i])) return NULL;
     }
 
@@ -26,19 +49,12 @@ Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     for (int i = y - 1; i >= 0; i--) {
         for (int j = 0; j < x * channel; j += channel) {
             if (channel == 4) {
-                picArr[i][j / channel] = {
-                    fPtr[curPos++],
-                    fPtr[curPos++],
-                    fPtr[curPos++],
-                    fPtr[curPos++]
-                };
+                memcpy(&(picArr[i][j / channel]), fPtr + curPos, 4);
+                curPos += 4;
             } else {
-                picArr[i][j / channel] = {
-                    fPtr[curPos + 2],
-                    fPtr[curPos + 1],
-                    fPtr[curPos],
-                };
-
+                memcpy(&(picArr[i][j / channel]), fPtr + curPos, 3);
+                picArr[i][j / channel] <<= 8;
+                picArr[i][j / channel] |= 255;
                 curPos += 3;
             }
         }
@@ -47,7 +63,7 @@ Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     return picArr;
 }
 
-Pixel_t **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
+int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     ON_ERROR(!fileName, "Nullptr");
 
     // index to an entry in the process's table of open file descriptors
@@ -70,56 +86,74 @@ Pixel_t **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     memcpy(channel, fPtr + CHANNEL_ST, 2);
     (*channel) >>= 3;
 
-    Pixel_t **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
+    int **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
     close(fileDescr);
 
     return image;
 }
 
-sf::Image imageFromPixels(int x, int y, int channel, Pixel_t **pixels) {
+sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     sf::Image pixelImg;
     pixelImg.create(x, y, sf::Color::Transparent);
 
     for (int i = y - 1; i >= 0; i--) {
         for (int j = 0; j < x; j++) {
-            if (channel == 4) {
-                pixelImg.setPixel(j, i, sf::Color(
-                    (pixels[i][j]).r,
-                    (pixels[i][j]).g,
-                    (pixels[i][j]).b,
-                    (pixels[i][j]).a
-                ));
-            } else {
-                pixelImg.setPixel(j, i, sf::Color(
-                    (pixels[i][j]).r,
-                    (pixels[i][j]).g,
-                    (pixels[i][j]).b
-                ));  
-            }
+            pixelImg.setPixel(j, i, sf::Color(
+                pixels[i][j]
+            ));
         }
     }
 
     return pixelImg;
 }
 
-void imposePics(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int backStartX, int backStartY, sf::Image *draw) {
-    __m256 arr255 = _mm256_set1_ps(255);
-    __m256 arr1   = _mm256_set1_ps(1);
-
+void imposePics(int **top, int x, int y, int frontChannel, int **back, int backStartX, int backStartY, sf::Image *draw) {
+    int **alignedBack = (int**) calloc(y, sizeof(int*));
     for (int i = 0; i < y; i++) {
-        for (int j = 0; j < x - 7; j += 8) {
+        alignedBack[i] = (int*) calloc(x, sizeof(int));
+        alignedBack[i] = (int*) memcpy(alignedBack[i], back[i], x * sizeof(int));
+    }
+    
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x - 8; j += 8) {
+            // float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
-            __m256i frontPic = (__m256i*) &((int) top [i][j]);
-            __m256i backPic  = (__m256i*) &((int) back[backY][backX]);
-            
-            // for (int m = 0; m < 8; m++, backX++) {
-            //     draw->setPixel(backX, backY, sf::Color(
-            //         (unsigned char)r[m], (unsigned char)g[m], (unsigned char)b[m],
-            //         255
-            //     ));
-            // }
+            __m256i topPic  = _mm256_load_si256((__m256i*) &(top[i][j]));
+            __m256i backPic = _mm256_load_si256((__m256i*) &(alignedBack[i][j]));
+
+            // taking red and blues (others set to 0)
+            __m256i topR_B  = _mm256_and_si256(maskR_B, topPic);
+            __m256i backR_B = _mm256_and_si256(maskR_B, backPic);
+
+            // taking alphas and green (others set to 0)
+            // __m256i topA_G  = _mm256_and_si256(maskA_G, topPic);
+            // __m256i backA_G = _mm256_and_si256(maskA_G, backPic);
+
+            __m256i topA_G  = _mm256_shuffle_epi8(topPic,  SHUFFLE_A_G);
+            __m256i backA_G = _mm256_shuffle_epi8(backPic, SHUFFLE_A_G);
+
+            // alphas on second byte
+            __m256i topA    = _mm256_shuffle_epi8(topPic,  SHUFFLE_ONLY_A);
+
+            // 256 - alpha on second byte
+            __m256i topA256 = _mm256_sub_epi8(ALL_255, topA);
+            __m256i resA_G  = _mm256_add_epi8(_mm256_mullo_epi16(topA_G, topA), _mm256_mullo_epi16(topA_G, topA256));
+            __m256i resR_B  = _mm256_add_epi8(_mm256_mullo_epi16(topR_B, topA), _mm256_mullo_epi16(topR_B, topA256));
+
+            resR_B          = _mm256_and_si256(_mm256_shuffle_epi8(resR_B, SHUFFLE_A_G), ZERO_SECOND);
+            __m256i res     = _mm256_or_si256(resA_G, resR_B);
+
+
+
+
+            // draw->setPixel(backX, backY, sf::Color(
+            //     ((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF000000) >> 24),
+            //     ((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16),
+            //     ((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8),
+            //     255
+            // ));
         }
     }
 }
@@ -138,10 +172,10 @@ void runMainCycle() {
     text.setFillColor(sf::Color::White);
 
     int frontX = 0, frontY = 0, frontChannel = 0;
-    Pixel_t **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
+    int **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    Pixel_t **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    int **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
