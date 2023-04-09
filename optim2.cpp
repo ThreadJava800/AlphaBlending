@@ -1,4 +1,29 @@
+#include <immintrin.h>
+
 #include "alphablend.h"
+
+__m256i maskR_B = _mm256_set1_epi32(0x00FF00FF);
+__m256i SHUFFLE_A_G    = _mm256_set_epi8(   0x80, 31, 0x80, 29,
+                                            0x80, 27, 0x80, 25,
+                                            0x80, 23, 0x80, 21,
+                                            0x80, 19, 0x80, 17,
+                                            0x80, 15, 0x80, 13,
+                                            0x80, 11, 0x80, 9,
+                                            0x80, 7,  0x80, 5,
+                                            0x80, 3,  0x80, 1);
+
+__m256i SHUFFLE_ONLY_A = _mm256_set_epi8(   0x80, 31, 0x80, 31,
+                                            0x80, 27, 0x80, 27,
+                                            0x80, 23, 0x80, 23,
+                                            0x80, 19, 0x80, 19,
+                                            0x80, 15, 0x80, 15,
+                                            0x80, 11, 0x80, 11,
+                                            0x80, 7,  0x80, 7,
+                                            0x80, 3,  0x80, 3);
+
+__m256i ALL_255        = _mm256_set1_epi16(255);
+__m256i ZERO_SECOND    = _mm256_set1_epi32(0xFF00FF00);
+
 
 #define ON_ERROR(expr, errStr) {                         \
     if (expr) {                                           \
@@ -66,6 +91,21 @@ int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     return image;
 }
 
+void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y) {
+    ON_ERROR(!back || !imposed, "Nullptr");
+
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x; j++) {
+            back->setPixel(startX + j, startY + i, sf::Color(
+                ((imposed[i * x + j] & 0x00FF0000) >> 16),
+                ((imposed[i * x + j] & 0x0000FF00) >>  8),
+                ((imposed[i * x + j] & 0x000000FF)),
+                ((imposed[i * x + j] & 0xFF000000) >> 24)
+            ));
+        }
+    }
+}
+
 sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     ON_ERROR(!pixels, "Nullptr");
 
@@ -88,24 +128,47 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     return pixelImg;
 }
 
-void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y) {
-    ON_ERROR(!back || !imposed, "Nullptr");
-
+void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw) {
+    int **alignedBack = (int**) calloc(y, sizeof(int*));
     for (int i = 0; i < y; i++) {
-        for (int j = 0; j < x; j++) {
-            back->setPixel(startX + j, startY + i, sf::Color(
-                ((imposed[i * x + j] & 0x00FF0000) >> 16),
-                ((imposed[i * x + j] & 0x0000FF00) >>  8),
-                ((imposed[i * x + j] & 0x000000FF)),
-                ((imposed[i * x + j] & 0xFF000000) >> 24)
-            ));
+        alignedBack[i] = (int*) calloc(x, sizeof(int));
+        alignedBack[i] = back[i + backStartY];
+    }
+    
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x - 7; j += 8) {
+            int backX = j + backStartX;
+            int backY = i + backStartY;
+
+            __m256i topPic  = _mm256_load_si256((__m256i*) &(top[i][j]));
+            __m256i backPic = _mm256_load_si256((__m256i*) &(alignedBack[backY][backX]));
+
+            // taking red and blues (others set to 0)
+            __m256i topR_B  = _mm256_and_si256(maskR_B, topPic);
+            __m256i backR_B = _mm256_and_si256(maskR_B, backPic);
+
+            // taking alphas and green (others set to 0)
+            __m256i topA_G  = _mm256_shuffle_epi8(topPic,  SHUFFLE_A_G);
+            __m256i backA_G = _mm256_shuffle_epi8(backPic, SHUFFLE_A_G);
+
+            // alphas on second byte
+            __m256i topA    = _mm256_shuffle_epi8(topPic,  SHUFFLE_ONLY_A);
+
+            // 256 - alpha on second byte
+            __m256i topA256 = _mm256_sub_epi16(ALL_255, topA);
+            __m256i resA_G  = _mm256_add_epi8(_mm256_mullo_epi16(topA, topA_G), _mm256_mullo_epi16(topA256, backA_G));
+            __m256i resR_B  = _mm256_add_epi8(_mm256_mullo_epi16(topA, topR_B), _mm256_mullo_epi16(topA256, backR_B));
+
+            resR_B          = _mm256_shuffle_epi8(resR_B, SHUFFLE_A_G);
+            resA_G          = _mm256_and_si256   (resA_G, ZERO_SECOND);
+            __m256i res     = _mm256_or_si256    (resR_B, resA_G);
+
+            _mm256_storeu_si256((__m256i *) (draw + i * x + j), res);
         }
     }
-}
 
-void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw) {
     for (int i = 0; i < y; i++) {
-        for (int j = 0; j < x; j++) {
+        for (int j = x - 7; j < x; j++) {
             float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
@@ -145,7 +208,7 @@ void runMainCycle() {
     int **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    int **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    int **backImgPixels  = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
@@ -166,11 +229,11 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
+            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 0, 0, picArr);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
 
-            mergeImposed(&backImg, picArr, 100, 100, frontX, frontY);
+            mergeImposed(&backImg, picArr, 0, 0, frontX, frontY);
 
             drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);
