@@ -18,6 +18,8 @@ struct Pixel_t {
 const int WINDOW_LENGTH = 1920;
 const int WINDOW_HEIGHT = 1080;
 
+const int TEST_ITR = 10;
+
 const int CMP_SIGN     = 0x4D42;    // bmp file signature
 const int OFFSET_START = 10;
 const int SIZEX_START  = 18;

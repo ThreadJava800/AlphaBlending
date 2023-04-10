@@ -11,7 +11,8 @@
     }                                                        \
 }                                                             \
 
-int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
+
+Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     ON_ERROR(!fPtr, "Nullptr");
 
     int** picArr = (int**) calloc(y, sizeof(int*));
@@ -37,10 +38,10 @@ int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
         }
     }
 
-    return picArr;
+    return (Pixel_t**) picArr;
 }
 
-int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
+Pixel_t **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     ON_ERROR(!fileName, "Nullptr");
 
     // index to an entry in the process's table of open file descriptors
@@ -63,30 +64,47 @@ int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     memcpy(channel, fPtr + CHANNEL_ST, 2);
     (*channel) >>= 3;
 
-    int **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
+    Pixel_t **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
     close(fileDescr);
 
     return image;
 }
 
-void imposePicsNaive(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw) {
+void mergeImposed(sf::Image *back, Pixel_t *imposed, int startX, int startY, int x, int y) {
+    ON_ERROR(!back || !imposed, "Nullptr");
+
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
-            float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
-            int backX = j + backStartX;
-            int backY = i + backStartY;
-
-            draw[i * x + j] = (
-                255 << 24 |
-                ((uchar) (((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16)) << 16) |
-                ((uchar) (((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8)) << 8)   |
-                ((uchar) (((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF)))));
+            back->setPixel(startX + j, startY + i, sf::Color(
+                imposed[i * x + j].r,
+                imposed[i * x + j].g,
+                imposed[i * x + j].b,
+                imposed[i * x + j].a
+            ));
         }
     }
 }
 
-void imposePicsAVX(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw) {
-    __m256i maskR_B = _mm256_set1_epi32(0x00FF00FF);
+void imposePicsNaive(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int backStartX, int backStartY, Pixel_t *draw) {
+    for (int i = 0; i < y; i++) {
+        for (int j = 0; j < x; j++) {
+            int alpha = top[i][j].a;
+            int backX = j + backStartX;
+            int backY = i + backStartY;
+
+            Pixel_t frontP = top[i][j];
+            Pixel_t backP  = back[backY][backX];
+
+            draw[i * x + j].a = 255;
+            draw[i * x + j].r = (frontP.r * alpha + (255 - alpha) * backP.r) >> 8;
+            draw[i * x + j].g = (frontP.g * alpha + (255 - alpha) * backP.g) >> 8;
+            draw[i * x + j].b = (frontP.b * alpha + (255 - alpha) * backP.b) >> 8;
+        }
+    }
+}
+
+void imposePicsAVX(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int backStartX, int backStartY, Pixel_t *draw) {
+    __m256i maskR_B        = _mm256_set1_epi32(0x00FF00FF);
     __m256i SHUFFLE_A_G    = _mm256_set_epi8(   0x80, 31, 0x80, 29,
                                                 0x80, 27, 0x80, 25,
                                                 0x80, 23, 0x80, 21,
@@ -143,20 +161,22 @@ void imposePicsAVX(int **top, int x, int y, int channel, int **back, int backSta
 
     for (int i = 0; i < y; i++) {
         for (int j = x - 7; j < x; j++) {
-            float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
+            int alpha = top[i][j].a;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
-            draw[i * x + j] = (
-                255 << 24 |
-                ((uchar) (((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16)) << 16) |
-                ((uchar) (((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8)) << 8)   |
-                ((uchar) (((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF)))));
+            Pixel_t frontP = top[i][j];
+            Pixel_t backP  = back[backY][backX];
+
+            draw[i * x + j].a = 255;
+            draw[i * x + j].r = (frontP.r * alpha + (255 - alpha) * backP.r) >> 8;
+            draw[i * x + j].g = (frontP.g * alpha + (255 - alpha) * backP.g) >> 8;
+            draw[i * x + j].b = (frontP.b * alpha + (255 - alpha) * backP.b) >> 8;
         }
     }
 }
 
-void freeDoubleArr(int **arr, int x, int y) {
+void freeDoubleArr(Pixel_t **arr, int x, int y) {
     if (!arr) return;
 
     for (int i = 0; i < y; i++) {
@@ -167,27 +187,25 @@ void freeDoubleArr(int **arr, int x, int y) {
 
 int main() {
     int frontX = 0, frontY = 0, frontChannel = 0;
-    int **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
+    Pixel_t **catImgPixels = imageFromFile("assets/front1.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    int **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    Pixel_t **backImgPixels = imageFromFile("assets/back1.bmp", &backX, &backY, &backChannel);
 
-    int* picArr = (int*) calloc(frontY * frontX, sizeof(int));
+    Pixel_t* picArr = (Pixel_t*) calloc(frontY * frontX, sizeof(Pixel_t));
     if (!picArr) return 0;
 
+    clock_t startTime = {};
     double allTime = 0;
     for (int i = 0; i < 1000; i++) {
-        auto start = std::chrono::high_resolution_clock::now();
+        startTime = clock();
 
-        imposePicsNaive(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
+        imposePicsAVX(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
         
-        auto end   = std::chrono::high_resolution_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-
-        allTime += duration.count();
+        allTime += ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000;
     }
 
-    printf("%lf\n", allTime / 1000);
+    printf("%lf us\n", allTime);
 
     freeDoubleArr(catImgPixels, frontX, frontY);
     freeDoubleArr(backImgPixels, backX, backY);

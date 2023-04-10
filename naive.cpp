@@ -107,14 +107,17 @@ void mergeImposed(sf::Image *back, Pixel_t *imposed, int startX, int startY, int
 void imposePics(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int backStartX, int backStartY, Pixel_t *draw) {
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
-            float alpha = top[i][j].a / 255;
+            int alpha = top[i][j].a;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
+            Pixel_t frontP = top[i][j];
+            Pixel_t backP  = back[backY][backX];
+
             draw[i * x + j].a = 255;
-            draw[i * x + j].r = top[i][j].r * alpha + (1 - alpha) * back[backY][backX].r;
-            draw[i * x + j].g = top[i][j].g * alpha + (1 - alpha) * back[backY][backX].g;
-            draw[i * x + j].b = top[i][j].b * alpha + (1 - alpha) * back[backY][backX].b;
+            draw[i * x + j].r = (frontP.r * alpha + (255 - alpha) * backP.r) >> 8;
+            draw[i * x + j].g = (frontP.g * alpha + (255 - alpha) * backP.g) >> 8;
+            draw[i * x + j].b = (frontP.b * alpha + (255 - alpha) * backP.b) >> 8;
         }
     }
 }
@@ -145,7 +148,7 @@ void runMainCycle() {
     Pixel_t **catImgPixels = imageFromFile("assets/front1.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    Pixel_t **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    Pixel_t **backImgPixels = imageFromFile("assets/back1.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
@@ -165,12 +168,12 @@ void runMainCycle() {
                 window.close();
             }
 
-            // clock_t startTime = clock();
-            // imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 900, 100, picArr);
-            // sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
-            // text.setString(fpsText);
+            clock_t startTime = clock();
+            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 900, 100, picArr);
+            sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
+            text.setString(fpsText);
 
-            // mergeImposed(&backImg, picArr, 900, 100, frontX, frontY);
+            mergeImposed(&backImg, picArr, 900, 100, frontX, frontY);
 
             drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);

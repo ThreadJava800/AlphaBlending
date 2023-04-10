@@ -14,16 +14,23 @@ And [second](https://github.com/ThreadJava800/AlphaBlending/blob/main/optim1.cpp
 
 This is the comparison table for different versions:
 
--O0:
+-O2:
 
 | Optimisation | Theoretical acceleration | Actual acceleration
 | --- | --- | --- |
-| `Naive` | 1x (1084us) | 1x (1084us) |
-| `AVX256` | 8x (135.5us) | 6.3x (171.54us) |
+| `Naive` | 1x (3497.5us) | 1x (3497.5us) |
+| `AVX256` | 8x (437.2us) | 7.33x (476.9us) |
 
--O1:
+-O3:
 
 | Optimisation | Theoretical acceleration | Actual acceleration
 | --- | --- | --- |
-| `Naive` | 1x (580.22us) | 1x (580.22us) |
-| `AVX256` | 8x (72.5us) | 5.5x (194.24us) |
+| `Naive` | 1x (3421.9us) | 1x (3421.9us) |
+| `AVX256` | 8x (427.7us) | 7.15x (478.9us) |
+
+-Ofast:
+
+| Optimisation | Theoretical acceleration | Actual acceleration
+| --- | --- | --- |
+| `Naive` | 1x (3531.8us) | 1x (3531.8us) |
+| `AVX256` | 8x (441.5us) | 7.36x (479.9us) |
