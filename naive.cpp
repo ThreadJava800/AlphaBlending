@@ -8,8 +8,9 @@
 }                                                             \
 
 
-int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
+Pixel_t **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
     ON_ERROR(!fPtr, "Nullptr");
+    ON_ERROR(channel != 3 && channel != 4, "Incorrect channel");
 
     int** picArr = (int**) calloc(y, sizeof(int*));
     if (!picArr) return NULL;
@@ -34,10 +35,10 @@ int **imageFromArr(int x, int y, int channel, int offset, char* fPtr) {
         }
     }
 
-    return picArr;
+    return (Pixel_t**) picArr;
 }
 
-int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
+Pixel_t **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     ON_ERROR(!fileName, "Nullptr");
 
     // index to an entry in the process's table of open file descriptors
@@ -60,13 +61,13 @@ int **imageFromFile(const char *fileName, int *x, int *y, int *channel) {
     memcpy(channel, fPtr + CHANNEL_ST, 2);
     (*channel) >>= 3;
 
-    int **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
+    Pixel_t **image = imageFromArr(*x, *y, *channel, fOffset, fPtr);
     close(fileDescr);
 
     return image;
 }
 
-sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
+sf::Image imageFromPixels(int x, int y, int channel, Pixel_t **pixels) {
     ON_ERROR(!pixels, "Nullptr");
 
     sf::Image pixelImg;
@@ -77,10 +78,10 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
 
         for (int j = 0; j < x; j++) {
             pixelImg.setPixel(j, i, sf::Color(
-                ((pixels[i][j] & 0xFF0000) >> 16),
-                ((pixels[i][j] & 0xFF00) >>  8),
-                ((pixels[i][j] & 0xFF)),
-                ((pixels[i][j] & 0xFF000000) >> 24)
+                pixels[i][j].r,
+                pixels[i][j].g,
+                pixels[i][j].b,
+                pixels[i][j].a
             ));
         }
     }
@@ -88,38 +89,37 @@ sf::Image imageFromPixels(int x, int y, int channel, int **pixels) {
     return pixelImg;
 }
 
-void mergeImposed(sf::Image *back, int *imposed, int startX, int startY, int x, int y) {
+void mergeImposed(sf::Image *back, Pixel_t *imposed, int startX, int startY, int x, int y) {
     ON_ERROR(!back || !imposed, "Nullptr");
 
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
             back->setPixel(startX + j, startY + i, sf::Color(
-                ((imposed[i * x + j] & 0x00FF0000) >> 16),
-                ((imposed[i * x + j] & 0x0000FF00) >>  8),
-                ((imposed[i * x + j] & 0x000000FF)),
-                ((imposed[i * x + j] & 0xFF000000) >> 24)
+                imposed[i * x + j].r,
+                imposed[i * x + j].g,
+                imposed[i * x + j].b,
+                imposed[i * x + j].a
             ));
         }
     }
 }
 
-void imposePics(int **top, int x, int y, int channel, int **back, int backStartX, int backStartY, int *draw) {
+void imposePics(Pixel_t **top, int x, int y, int channel, Pixel_t **back, int backStartX, int backStartY, Pixel_t *draw) {
     for (int i = 0; i < y; i++) {
         for (int j = 0; j < x; j++) {
-            float alpha = ((top[i][j] & 0xFF000000)>>24) / 255;
+            float alpha = top[i][j].a / 255;
             int backX = j + backStartX;
             int backY = i + backStartY;
 
-            draw[i * x + j] = (
-                255 << 24 |
-                ((uchar) (((top[i][j] & 0xFF0000) >> 16) * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF0000) >> 16)) << 16) |
-                ((uchar) (((top[i][j] & 0xFF00) >> 8)    * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF00) >> 8)) << 8)   |
-                ((uchar) (((top[i][j] & 0xFF))           * alpha + (1 - alpha) * ((back[backY][backX] & 0xFF)))));
+            draw[i * x + j].a = 255;
+            draw[i * x + j].r = top[i][j].r * alpha + (1 - alpha) * back[backY][backX].r;
+            draw[i * x + j].g = top[i][j].g * alpha + (1 - alpha) * back[backY][backX].g;
+            draw[i * x + j].b = top[i][j].b * alpha + (1 - alpha) * back[backY][backX].b;
         }
     }
 }
 
-void freeDoubleArr(int **arr, int x, int y) {
+void freeDoubleArr(Pixel_t **arr, int x, int y) {
     if (!arr) return;
 
     for (int i = 0; i < y; i++) {
@@ -142,16 +142,16 @@ void runMainCycle() {
     text.setFillColor(sf::Color::White);
 
     int frontX = 0, frontY = 0, frontChannel = 0;
-    int **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
+    Pixel_t **catImgPixels = imageFromFile("assets/front1.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    int **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    Pixel_t **backImgPixels = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
     window.setPosition(sf::Vector2i(0, 0));
 
-    int* picArr = (int*) calloc(frontY * frontX, sizeof(int));
+    Pixel_t* picArr = (Pixel_t*) calloc(frontY * frontX, sizeof(Pixel_t));
     if (!picArr) return;
 
     while (window.isOpen())
@@ -165,12 +165,12 @@ void runMainCycle() {
                 window.close();
             }
 
-            clock_t startTime = clock();
-            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
-            sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
-            text.setString(fpsText);
+            // clock_t startTime = clock();
+            // imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 900, 100, picArr);
+            // sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
+            // text.setString(fpsText);
 
-            mergeImposed(&backImg, picArr, 100, 100, frontX, frontY);
+            // mergeImposed(&backImg, picArr, 900, 100, frontX, frontY);
 
             drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);
