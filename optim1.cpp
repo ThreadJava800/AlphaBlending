@@ -199,10 +199,10 @@ void runMainCycle() {
     text.setFillColor(sf::Color::White);
 
     int frontX = 0, frontY = 0, frontChannel = 0;
-    Pixel_t **catImgPixels = imageFromFile("assets/front.bmp", &frontX, &frontY, &frontChannel);
+    Pixel_t **catImgPixels = imageFromFile("assets/front1.bmp", &frontX, &frontY, &frontChannel);
 
     int backX = 0, backY = 0, backChannel = 0;
-    Pixel_t **backImgPixels  = imageFromFile("assets/back.bmp", &backX, &backY, &backChannel);
+    Pixel_t **backImgPixels  = imageFromFile("assets/back1.bmp", &backX, &backY, &backChannel);
     sf::Image backImg    = imageFromPixels(backX, backY, backChannel, backImgPixels);
 
     sf::RenderWindow window(sf::VideoMode(WINDOW_LENGTH, WINDOW_HEIGHT), "Alpha blending");
@@ -223,11 +223,11 @@ void runMainCycle() {
             }
 
             clock_t startTime = clock();
-            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
+            imposePics(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 900, 100, picArr);
             sprintf(fpsText, "%.2lf ms", ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000);  // ms
             text.setString(fpsText);
 
-            mergeImposed(&backImg, picArr, 100, 100, frontX, frontY);
+            mergeImposed(&backImg, picArr, 900, 100, frontX, frontY);
 
             drawTexture.loadFromImage(backImg);
             drawSp.     setTexture   (drawTexture);

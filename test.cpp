@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <immintrin.h>
 #include <chrono>
+#include <math.h>
 
 #include "alphablend.h"
 
@@ -195,17 +196,31 @@ int main() {
     Pixel_t* picArr = (Pixel_t*) calloc(frontY * frontX, sizeof(Pixel_t));
     if (!picArr) return 0;
 
+    double *times = (double*) calloc(100, sizeof(double));
     clock_t startTime = {};
     double allTime = 0;
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 100; i++) {
         startTime = clock();
 
         imposePicsAVX(catImgPixels, frontX, frontY, frontChannel, backImgPixels, 100, 100, picArr);
         
-        allTime += ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000;
+        double time = ((double)clock() - (double)startTime) / CLOCKS_PER_SEC * 1000 * 1000;
+        allTime += time;
+
+        times[i] = time;
     }
 
-    printf("%lf us\n", allTime);
+    double median = allTime / 100;
+    double sum = 0;
+    for (int i = 0; i < 100; i++) {
+        sum += (times[i] - median) * (times[i] - median);
+    }
+
+    sum /= 100;
+
+    printf("%lf %lf\n", sqrt(sum), median);
+
+    free(times);
 
     freeDoubleArr(catImgPixels, frontX, frontY);
     freeDoubleArr(backImgPixels, backX, backY);
