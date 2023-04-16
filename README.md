@@ -66,4 +66,4 @@ Assembly code:\
 Assembly code with -O1 optimisation:\
 ![O1](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o1.png)
 
-
+-O2 makes calculations on address calculation block (which is way faster).
