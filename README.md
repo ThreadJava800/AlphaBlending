@@ -69,3 +69,9 @@ Assembly code with -O1 optimisation:\
 -O2 makes calculations on address calculation block (which is way faster).
 
 ![O2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o2.png)
+
+-O3 and -Ofast seem to have the same effect. They shuffle instructions in order to use instruction pipeline to speed up calculations.
+
+## Conclusion <a name="conclusion"></a>
+
+As we can see, even -Ofast is not able to use intrinsics to its fullest (it doesn't use shuffles to optimise this piece of code, for example). And, to be honest, I'm happy with that. It makes out job not meaningless. At least, for now.
