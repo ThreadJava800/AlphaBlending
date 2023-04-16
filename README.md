@@ -60,10 +60,10 @@ I decided to explore how different g++ optimisers work.
  Last but not least, -O1 replaces several commands with one (e.g. mov + sar = movzx)
 
 C code:\
-![C code](https://github.com/ThreadJava800/AlphaBlending/blob/master/testpics/c_code.png)\
+![C code](https://github.com/ThreadJava800/AlphaBlending/blob/master/readmepics/c_code.png)\
 Assembly code:\
-![O0](https://github.com/ThreadJava800/AlphaBlending/blob/master/testpics/o0.png)\
+![O0](https://github.com/ThreadJava800/AlphaBlending/blob/master/readmepics/o0.png)\
 Assembly code with -O1 optimisation:\
-![O1](https://github.com/ThreadJava800/AlphaBlending/blob/master/testpics/o1.png)
+![O1](https://github.com/ThreadJava800/AlphaBlending/blob/master/readmepics/o1.png)
 
 
