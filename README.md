@@ -53,4 +53,17 @@ This is the comparison table for different versions:
 | `AVX256` | 8x (444.4 us) | 6.9x (511.6 ± 84 us) |
 
 ## Dive into assembly <a name="assemble"></a>
+I decided to explore how different g++ optimisers work.
+
+-O1 works with local variables mostly via registers (while -O0 uses stack).\
+ Also, -O1 analyses code and does not count the same value twice.\
+ Last but not least, -O1 replaces several commands with one (e.g. mov + sar = movzx)
+
+C code:\
+![C code](https://github.com/ThreadJava800/Mandelbrot/blob/master/testpics/c_code.png)\
+Assembly code:\
+![O0](https://github.com/ThreadJava800/Mandelbrot/blob/master/testpics/o0.png)\
+Assembly code with -O1 optimisation:\
+![O1](https://github.com/ThreadJava800/Mandelbrot/blob/master/testpics/o1.png)
+
 
