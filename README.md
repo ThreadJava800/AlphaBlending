@@ -72,7 +72,14 @@ Assembly code with -O1 optimisation:\
 
 ![O2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o2.png)
 
--O3 and -Ofast seem to have the same effect. They shuffle instructions in order to use instruction pipeline to speed up calculations.
+-O3 and -Ofast seem to have the same effect. They shuffle instructions in order to use instruction pipeline to speed up calculations.\
+Also, they use more complicated assembly commands that combine several logic operations. (However, it doesn't use shuffles!)\
+It is important to mention, that -O3 & -Ofast unroll the cycles much more that other optimizers.\
+Remarkable, that this optimization works approximately the same time as -O2. (Possibly, due to huge amount of assembly commands).
+
+![C code](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/c_code3.png)
+
+![O3](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o3.png)
 
 ## Conclusion <a name="conclusion"></a>
 
