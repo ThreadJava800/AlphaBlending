@@ -29,6 +29,8 @@ And [second](https://github.com/ThreadJava800/AlphaBlending/blob/main/optim1.cpp
 
 ## Comparison table <a name="compare"></a>
 
+*All time measurements have been done only for calculation part (graphics not measured).*
+
 This is the comparison table for different versions:
 
 -O2:
