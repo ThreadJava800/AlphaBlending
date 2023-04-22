@@ -1,86 +1,89 @@
 # Alpha blending
-> This program just calculates formula (alphaFront * colorFront) + (1 - alphaFront) * colorBack for each pixel.
+> Программа рассчитывает цвет для каждого пикселя по формуле `(alphaFront * colorFront) + (1 - alphaFront) * colorBack`.
 
-## Table of Contents
-1. [General information](#general)
-2. [Progress](#progress)
-3. [Comparison table](#compare)
-4. [Dive into assembly](#assemble)
-5. [Conclusion](#conclusion)
+## Содержание
+1. [Общая инфомация](#general)
+2. [Ход работы](#progress)
+3. [Сравнение оптимизаций](#compare)
+4. [Углубимся в ассемблер](#assemble)
+5. [Заключение](#conclusion)
 
-## General information <a name="general"></a>
+## GОбщая инфомация <a name="general"></a>
 
-I took this simple algorithm to work more with intrinsics (shuffles particularly).
+Я решил использовать этот алгоритм, чтобы глубже разобраться в интринсиках и `пареллелизме уровня инструкций`. В частности, в `shuffle`-ах. 
 
-Here's the result of alpha blending of 2 pictures: \
+Ниже приведён результат работы алгоритма:\
 ![Alpha Blending](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/result.png)
 
 |  |  |
 | --- | --- |
-| `Compiler` | g++ (GCC) 12.2.1 |
-| `Optimisation flags` | -mavx2
-| `OS` | Arch Linux x86_64 (6.2.7-arch1-1)|
-| `CPU` | AMD Ryzen 5 5500U
+| `Компилятор` | g++ (GCC) 12.2.1 |
+| `Флаги оптимизации` | -mavx2
+| `ОС` | Arch Linux x86_64 (6.2.7-arch1-1)|
+| `Процессор` | AMD Ryzen 5 5500U
 
-## Progress <a name="progress"></a>
+## Ход работы <a name="progress"></a>
 
-I coded two versions of this program. One is [naive](https://github.com/ThreadJava800/AlphaBlending/blob/main/naive.cpp)\
-And [second](https://github.com/ThreadJava800/AlphaBlending/blob/main/optim1.cpp) is with intrinsics (mostly using shuffles).
+Я реализовал две версии программы. Первая - [наивная](https://github.com/ThreadJava800/AlphaBlending/blob/main/naive.cpp)\
+И вторая - с [использованием интринсиков](https://github.com/ThreadJava800/AlphaBlending/blob/main/optim1.cpp) (в основном с помощью `shuffle`-ов).
 
-## Comparison table <a name="compare"></a>
+## Сравнение реализаций <a name="compare"></a>
 
-*All time measurements have been done only for calculation part (graphics not measured).*
+*Время работы измерялось лишь для расчётов (графика и считывание картинок из памяти не считались).*
 
-This is the comparison table for different versions:
+Ниже приведена таблица сравнений для разных оптимизаций:
 
--O2:
+`-O2`:
 
-| Optimisation | Theoretical acceleration | Actual acceleration |
+| Реализация | Теоретическое ускорение | Фактическое ускорение |
 | --- | --- | --- |
-| `Naive` | 1x (3505 us) | 1x (3505 ± 34.8 us) |
+| `Наивная` | 1x (3505 us) | 1x (3505 ± 34.8 us) |
 | `AVX256` | 8x (438.1 us) | 7x (497 ± 60.5 us) |
 
 -O3:
 
-| Optimisation | Theoretical acceleration | Actual acceleration |
+| Реализация | Теоретическое ускорение | Фактическое ускорение |
 | --- | --- | --- |
-| `Naive` | 1x (3552.5 us) | 1x (3552.5 ± 34 us) |
+| `Наивная` | 1x (3552.5 us) | 1x (3552.5 ± 34 us) |
 | `AVX256` | 8x (444 us) | 7x (506.7 ± 79.6 us) |
 
 -Ofast:
 
-| Optimisation | Theoretical acceleration | Actual acceleration |
+| Реализация | Теоретическое ускорение | Фактическое ускорение |
 | --- | --- | --- |
-| `Naive` | 1x (3555 us) | 1x (3555 ± 39.1 us) |
+| `Наивная` | 1x (3555 us) | 1x (3555 ± 39.1 us) |
 | `AVX256` | 8x (444.4 us) | 6.9x (511.6 ± 84 us) |
 
-## Dive into assembly <a name="assemble"></a>
-I decided to explore how different g++ optimisers work.
+## Углубимся в ассемблер <a name="assemble"></a>
+Я решил исследовать, как работают различные `g++` оптимизации.
 
--O1 works with local variables mostly via registers (while -O0 uses stack).\
- Also, -O1 analyses code and does not count the same value twice.\
- Last but not least, -O1 replaces several commands with one (e.g. mov + sar = movzx)
+`-O1` работает с локальными переменными через регистры, в отличии от `-O0`, который использует стек.
+Это рабоает быстрее, т.к. нет надобности в пересылке данных из регистра в стек и наоборот.\
+Также, `-O1` анализирует код и не считает одно и тоже значение дважды .\
+Кроме того, `-O1` заменяет несколько команд одной (например, mov + sar = movzx)
 
-C code:\
+Код на си:\
 ![C code](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/c_code.png)\
-Assembly code:\
+Ассемблерный код (`-O0`):\
 ![O0](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o0.png)\
-Assembly code with -O1 optimisation:\
+Ассемблерный код (`-O1`):\
 ![O1](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o1.png)
 
--O2 makes calculations on address calculation block (which is way faster).
+`-O2` совершает все расчёты на блоке вычисление адресов (что гораздо быстрее).
 
 ![O2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o2.png)
 
--O3 and -Ofast seem to have the same effect. They shuffle instructions in order to use instruction pipeline to speed up calculations.\
-Also, they use more complicated assembly commands that combine several logic operations. (However, -O3 (as well as -Ofast) doesn't use shuffles!)\
-It is important to mention, that -O3 & -Ofast unroll the cycles much more that other optimizers.\
-Remarkable, that this optimization works approximately the same time as -O2. (Possibly, due to huge amount of assembly commands).
+`-O3` и `-Ofast` имеют одинаковый эффект.
+Они меняют команды местами, чтобы использовать возможности вычислительного конвеера для ускорения вычислений.\
+Также, они используют более сложные ассемблерный команды, которые сочетают в себе несколько логических операций.\
+Примечательно, что ни одна из оптимизаций не смогла "додуматься" до использование `shuffle`-ов.\
+Также, важно отметить, что `-O3` и `-Ofast` разворачивают циклы гораздо сильнее, чем другие оптимизации.\
+Примечательно, что эти оптимизации работают за то же время, что и `-O2`.
+(Возможно, из-за огромного количества ассемблерных команд).
 
 ![C code](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/c_code3.png)
 
 ![O3](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o3.png)
 
-## Conclusion <a name="conclusion"></a>
-
-As we can see, even -Ofast is not able to use intrinsics to its fullest (it doesn't use shuffles to optimise this piece of code, for example). And, to be honest, I'm happy with that. It makes out job not meaningless. At least, for now.
+## Заключение <a name="conclusion"></a>
+Как мы можем видеть, даже `-Ofast` не способен использовать интринсики на полную (компилятор, например, не решается использовать `shuffle`-ы для оптимизации). И, если честно, я рад этому. Это означает, что наша работа пока ещё не бессмысленна.
