@@ -19,7 +19,7 @@
 *Back и front - фоновое изображение и переднее.*\
 $result.alpha = 255$\
 $result.red = front.red * front.alpha + back.red * (1 - front.alpha)$\
-Аналогично вычисляются и result.green с result.blue.
+Аналогично вычисляются result.green и result.blue.
 
 
 Я решил использовать этот алгоритм, чтобы глубже разобраться в <em>intrinsic</em> функциях и <em>пареллелизме уровня инструкций</em>. В частности, в <em>shuffle-ах</em>. 
@@ -90,7 +90,7 @@ Front и top же - двумерные массивы, хранящие цвет
 `-O2` переставляет команды таким образом, что вычисления происходят быстрее (благодаря вычислительному конвейеру). 
 
 Код на Си:\
-![c_code2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/c_code2.png)
+![c_code2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/c_code2.png)\
 Ассемблерный код (`-O2`):\
 ![O2](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o2.png)
 
@@ -107,7 +107,7 @@ Front и top же - двумерные массивы, хранящие цвет
 Ассемблерный код (`-Ofast`):\
 ![O3](https://github.com/ThreadJava800/AlphaBlending/blob/main/readmepics/o3.png)
 
-Примечательно, что ни одна из оптимизаций не смогла "додуматься" до использование <em>shuffle-ов</em>.
+Примечательно, что ни одна из оптимизаций не смогла "додуматься" до использования <em>shuffle-ов</em>.
 
 ## Заключение <a name="conclusion"></a>
-Как мы можем видеть, даже `-Ofast` не способен использовать интринсики на полную (компилятор, например, не решается использовать <em>shuffle-ы</em> для оптимизации). И, если честно, я рад этому. Это означает, что наша работа пока ещё не бессмысленна.
+Как мы можем видеть, даже `-Ofast` не способен использовать интринсики на полную (компилятор, например, не решается использовать <em>shuffle-ы</em> для оптимизации).
